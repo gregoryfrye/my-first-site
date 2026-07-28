@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens — seeded from the pre-1.0 site (gregfrye.us).
+ * Swap values here to restyle the whole site; components should
+ * never hardcode colors, type sizes, or spacing (see CLAUDE.md).
+ */
+@theme {
+  /* Color roles */
+  --color-canvas: #fafaf9;
+  --color-ink: #1c1b1a;
+  --color-muted: #78716c;
+  --color-border: #e2e0dc;
+
+  /* Type families */
+  --font-serif: "Times New Roman", Times, serif;
+  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+
+  /* Type scale */
+  --text-display: clamp(2rem, 6vw, 4.5rem);
+  --text-display--line-height: 1.1;
+  --text-heading: clamp(1.75rem, 4vw, 2.75rem);
+  --text-heading--line-height: 1.2;
+  --text-body: 1rem;
+  --text-body--line-height: 1.6;
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.5;
+
+  /* Letter-spacing */
+  --tracking-tight: -0.02em;
+
+  /* Spacing rhythm */
+  --spacing-nav: 1.25rem;
+  --spacing-gutter: 2rem;
+}
+
+@layer base {
+  body {
+    @apply bg-canvas font-serif text-ink antialiased;
+  }
+}
