@@ -26,20 +26,25 @@ export type Role = {
   /** Plain-text clients with no entity. */
   names: string[];
   description: string;
+  /** Slugs into /content/skills. */
+  skills: string[];
+  /** Marks the role that drives the homepage hero. At most one. */
+  current?: boolean;
 };
 
 /** A client is the case study entity — the five beats live here. */
 export type Client = {
   slug: string;
   name: string;
-  years: string;
+  /** Not every client has a defined era (e.g. an ongoing independent project). */
+  years?: string;
   /** Slugs into /content/roles. */
   roles: string[];
-  featured?: boolean;
   summary: string;
   /** Three max, by design. */
   stats?: Stat[];
   content: string;
+  featuredOnHome?: boolean;
 };
 
 /** A project is a chapter within a client's story — no beats. */
@@ -50,40 +55,56 @@ export type Project = {
   client: string;
   /** Slug into /content/roles. */
   role: string;
-  year: string;
+  /** Not every project has a defined era. */
+  year?: string;
   /** Slugs into /content/skills. */
   skills: string[];
   summary: string;
   content: string;
-  featured?: boolean;
   /** Filename within this project's /images folder. */
   featuredImage?: string;
+  featuredOnHome?: boolean;
 };
 
 export type Skill = {
   slug: string;
   name: string;
   summary: string;
+  /** Filename within this skill's /images folder. */
+  featuredImage?: string;
+  featuredOnHome?: boolean;
 };
 
-/** Inputs. Folder convention defined here; no content yet. */
+/** Inputs. */
 export type Study = {
   slug: string;
   title: string;
   summary: string;
   projects?: string[];
   clients?: string[];
+  featuredOnHome?: boolean;
 };
 
-/** Outputs. Folder convention defined here; no content yet. */
+/** Outputs. */
 export type Artifact = {
   slug: string;
   title: string;
   type: string;
+  summary: string;
   /** Slug into /content/projects. */
   project: string;
-  images?: string[];
+  /** Filename within this artifact's /images folder. */
+  featuredImage?: string;
+  featuredOnHome?: boolean;
 };
+
+/** One entry in the homepage's featuredOnHome strip, normalized across types. */
+export type FeaturedEntity =
+  | { kind: "client"; client: Client }
+  | { kind: "project"; project: Project; client: Client | null }
+  | { kind: "skill"; skill: Skill }
+  | { kind: "artifact"; artifact: Artifact; project: Project | null; client: Client | null }
+  | { kind: "study"; study: Study; client: Client | null };
 
 function readMdx(filePath: string): { data: Record<string, unknown>; content: string } | null {
   if (!fs.existsSync(filePath)) return null;
@@ -146,7 +167,14 @@ export function getRoleBySlug(slug: string): Role | null {
     clients: (data.clients as string[] | undefined) ?? [],
     names: (data.names as string[] | undefined) ?? [],
     description: data.description as string,
+    skills: (data.skills as string[] | undefined) ?? [],
+    current: data.current as boolean | undefined,
   };
+}
+
+/** The role marked current: true, if any — drives the homepage hero. */
+export function getCurrentRole(): Role | null {
+  return getAllRoles().find((role) => role.current) ?? null;
 }
 
 // --- clients (case studies) ---
@@ -164,17 +192,13 @@ export function getClientBySlug(slug: string): Client | null {
   return {
     slug,
     name: data.name as string,
-    years: data.years as string,
+    years: data.years as string | undefined,
     roles: (data.roles as string[] | undefined) ?? [],
-    featured: data.featured as boolean | undefined,
     summary: data.summary as string,
     stats: data.stats as Stat[] | undefined,
     content,
+    featuredOnHome: data.featuredOnHome as boolean | undefined,
   };
-}
-
-export function getFeaturedClient(): Client | null {
-  return getAllClients().find((client) => client.featured) ?? null;
 }
 
 export function getClientImages(slug: string): string[] {
@@ -198,12 +222,12 @@ export function getProjectBySlug(slug: string): Project | null {
     title: data.title as string,
     client: data.client as string,
     role: data.role as string,
-    year: data.year as string,
+    year: data.year as string | undefined,
     skills: (data.skills as string[] | undefined) ?? [],
     summary: data.summary as string,
     content,
-    featured: data.featured as boolean | undefined,
     featuredImage: data.featuredImage as string | undefined,
+    featuredOnHome: data.featuredOnHome as boolean | undefined,
   };
 }
 
@@ -220,19 +244,6 @@ export function getProjectsByClient(clientSlug: string): Project[] {
   return getAllProjects().filter((project) => project.client === clientSlug);
 }
 
-/**
- * featured: true on a project wins. Otherwise, the first project (by
- * current sort) belonging to the featured client.
- */
-export function getFeaturedProject(): Project | null {
-  const explicit = getAllProjects().find((project) => project.featured);
-  if (explicit) return explicit;
-
-  const client = getFeaturedClient();
-  if (!client) return null;
-  return getProjectsByClient(client.slug)[0] ?? null;
-}
-
 export function getProjectsByRole(roleSlug: string): Project[] {
   return getAllProjects().filter((project) => project.role === roleSlug);
 }
@@ -244,16 +255,31 @@ export function getProjectsBySkill(skillSlug: string): Project[] {
 // --- skills ---
 
 export function getAllSkills(): Skill[] {
-  return listFlatSlugs(SKILLS_DIR)
+  return listFolderSlugs(SKILLS_DIR)
     .map((slug) => getSkillBySlug(slug))
     .filter((skill): skill is Skill => skill !== null);
 }
 
 export function getSkillBySlug(slug: string): Skill | null {
-  const parsed = readMdx(path.join(SKILLS_DIR, `${slug}.mdx`));
+  const parsed = readMdx(path.join(SKILLS_DIR, slug, "index.mdx"));
   if (!parsed) return null;
   const { data } = parsed;
-  return { slug, name: data.name as string, summary: data.summary as string };
+  return {
+    slug,
+    name: data.name as string,
+    summary: data.summary as string,
+    featuredImage: data.featuredImage as string | undefined,
+    featuredOnHome: data.featuredOnHome as boolean | undefined,
+  };
+}
+
+export function getSkillImages(slug: string): string[] {
+  return listImageFiles(path.join(SKILLS_DIR, slug, "images"));
+}
+
+/** featuredImage → first image by filename order → undefined (text-only card). */
+export function getSkillCardImage(skill: Skill): string | undefined {
+  return skill.featuredImage ?? getSkillImages(skill.slug)[0];
 }
 
 // --- studies (inputs) ---
@@ -274,6 +300,7 @@ export function getStudyBySlug(slug: string): Study | null {
     summary: data.summary as string,
     projects: data.projects as string[] | undefined,
     clients: data.clients as string[] | undefined,
+    featuredOnHome: data.featuredOnHome as boolean | undefined,
   };
 }
 
@@ -293,9 +320,20 @@ export function getArtifactBySlug(slug: string): Artifact | null {
     slug,
     title: data.title as string,
     type: data.type as string,
+    summary: data.summary as string,
     project: data.project as string,
-    images: data.images as string[] | undefined,
+    featuredImage: data.featuredImage as string | undefined,
+    featuredOnHome: data.featuredOnHome as boolean | undefined,
   };
+}
+
+export function getArtifactImages(slug: string): string[] {
+  return listImageFiles(path.join(ARTIFACTS_DIR, slug, "images"));
+}
+
+/** featuredImage → first image by filename order → undefined (text-only card). */
+export function getArtifactCardImage(artifact: Artifact): string | undefined {
+  return artifact.featuredImage ?? getArtifactImages(artifact.slug)[0];
 }
 
 // --- reverse joins ---
@@ -312,6 +350,51 @@ export function getRolesByClient(clientSlug: string): Role[] {
   return getAllRoles().filter((role) => role.clients.includes(clientSlug));
 }
 
+// --- homepage featured strip ---
+
+/**
+ * Every entity across all six collections flagged featuredOnHome: true,
+ * normalized with enough context (parent project/client) to build a card.
+ * Collection order (client, project, skill, artifact, study) is the
+ * display order — set featuredOnHome on exactly the entities meant to
+ * appear, don't hardcode the picks here.
+ */
+export function getFeaturedOnHome(): FeaturedEntity[] {
+  const items: FeaturedEntity[] = [];
+
+  for (const client of getAllClients()) {
+    if (client.featuredOnHome) items.push({ kind: "client", client });
+  }
+
+  for (const project of getAllProjects()) {
+    if (project.featuredOnHome) {
+      items.push({ kind: "project", project, client: getClientBySlug(project.client) });
+    }
+  }
+
+  for (const skill of getAllSkills()) {
+    if (skill.featuredOnHome) items.push({ kind: "skill", skill });
+  }
+
+  for (const artifact of getAllArtifacts()) {
+    if (artifact.featuredOnHome) {
+      const project = getProjectBySlug(artifact.project);
+      const client = project ? getClientBySlug(project.client) : null;
+      items.push({ kind: "artifact", artifact, project, client });
+    }
+  }
+
+  for (const study of getAllStudies()) {
+    if (study.featuredOnHome) {
+      const clientSlug = study.clients?.[0];
+      const client = clientSlug ? getClientBySlug(clientSlug) : null;
+      items.push({ kind: "study", study, client });
+    }
+  }
+
+  return items;
+}
+
 // --- build-time validation ---
 
 /** Warns (does not throw) on any slug reference across collections that doesn't resolve. */
@@ -326,6 +409,11 @@ export function validateContentGraph(): string[] {
     for (const slug of role.clients) {
       if (!clientSlugs.has(slug)) {
         warnings.push(`role "${role.slug}" references missing client "${slug}"`);
+      }
+    }
+    for (const slug of role.skills) {
+      if (!skillSlugs.has(slug)) {
+        warnings.push(`role "${role.slug}" references missing skill "${slug}"`);
       }
     }
   }

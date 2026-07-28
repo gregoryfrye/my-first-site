@@ -10,36 +10,56 @@ served at request time by `app/content-images/[...segments]/route.ts` reading
 straight from `/content`.
 
 The model: **roles → clients → projects**, with **skills** attached to
-projects, and **studies** (inputs) / **artifacts** (outputs) attached to
-projects or clients. Every cross-entity reference is a slug in frontmatter —
-never copy-pasted text. `lib/content.ts` is the only code that reads
-`/content`; it exposes a getter and `getAllX` for each collection, plus the
-join functions (`getProjectsByClient`, `getProjectsByRole`,
-`getProjectsBySkill`, `getClientsByRole`, `getRolesByClient`) and
-`validateContentGraph()`, which warns at build time on any slug reference
-that doesn't resolve. Call it, don't silently ignore broken refs.
+projects (and to the current role), and **studies** (inputs) / **artifacts**
+(outputs) attached to projects or clients. Every cross-entity reference is a
+slug in frontmatter — never copy-pasted text. `lib/content.ts` is the only
+code that reads `/content`; it exposes a getter and `getAllX` for each
+collection, plus the join functions (`getProjectsByClient`,
+`getProjectsByRole`, `getProjectsBySkill`, `getClientsByRole`,
+`getRolesByClient`, `getFeaturedOnHome`) and `validateContentGraph()`, which
+warns at build time on any slug reference that doesn't resolve. Call it,
+don't silently ignore broken refs.
 
 - **Roles** — `/content/roles/<slug>.mdx`, flat files, one per era.
   Frontmatter: `company`, `title`, `years`, `location`, `clients` (slugs
   into `/content/clients`, where an entity exists), `names` (plain text for
-  clients with no entity), `description`.
+  clients with no entity), `description`, `skills` (slugs into
+  `/content/skills`), optional `current`. At most one role is `current:
+  true` — it drives the homepage hero (about copy + skills column). Role ↔
+  client is declared on both sides (role's `clients[]` and client's
+  `roles[]`) — keep them in sync or joins silently return nothing.
 - **Clients** — `/content/clients/<slug>/index.mdx` + `/images`. **Clients
   are case studies** — the five beats (see Copy tone) live here, at the
-  client level, nowhere else. Frontmatter: `name`, `years`, `roles` (slugs),
-  `featured`, `summary`, `stats`.
+  client level, nowhere else. Frontmatter: `name`, optional `years` (not
+  every client has a defined era), `roles` (slugs), `summary`, `stats`,
+  optional `featuredOnHome`.
 - **Projects** — `/content/projects/<slug>/index.mdx` + `/images`.
   **Projects are chapters**, not case studies: no beats, no duplicating the
   client's story. Frontmatter: `title`, `client` (slug), `role` (slug),
-  `year`, `skills` (slugs), `summary`. Body: scope and process notes.
-- **Skills** — `/content/skills/<slug>.mdx`, flat files. Frontmatter:
-  `name`, `summary`. No body.
+  optional `year`, `skills` (slugs), `summary`, optional `featuredImage`,
+  optional `featuredOnHome`. Body: scope and process notes.
+- **Skills** — `/content/skills/<slug>/index.mdx` + `/images`. Frontmatter:
+  `name`, `summary`, optional `featuredImage`, optional `featuredOnHome`. No
+  body.
 - **Studies** (inputs) — `/content/studies/<slug>/index.mdx`. Frontmatter:
-  `title`, `summary`, optional `projects`/`clients` (slugs).
-- **Artifacts** (outputs) — `/content/artifacts/<slug>/index.mdx`.
-  Frontmatter: `title`, `type`, `project` (slug), `images`.
+  `title`, `summary`, optional `projects`/`clients` (slugs), optional
+  `featuredOnHome`.
+- **Artifacts** (outputs) — `/content/artifacts/<slug>/index.mdx` +
+  `/images`. Frontmatter: `title`, `type`, `summary`, `project` (slug),
+  optional `featuredImage`, optional `featuredOnHome`.
 
 Image filenames are prefixed `01-`, `02-`, etc. — prefix order is display
-order; `lib/content.ts` sorts each `/images` folder by filename.
+order; `lib/content.ts` sorts each `/images` folder by filename. Clients,
+projects, skills, and artifacts all follow the same image fallback chain:
+`featuredImage` (a filename in that entity's `/images`) → first image by
+filename order → no image, text-only card. Never an error, never broken
+layout space.
+
+**Homepage featured strip.** Set `featuredOnHome: true` on any client,
+project, skill, artifact, or study to put it in the homepage strip —
+`getFeaturedOnHome()` scans all five collections and returns them in that
+order (client, project, skill, artifact, study). Don't hardcode the picks in
+a page component; add the flag to the content instead.
 
 **Entities are earned by content.** Create an entity file only when there's a
 real case study, project, study, or artifact behind it. A name with nothing
@@ -85,3 +105,8 @@ asks for.
 Case study flow session — solve together: project/chapter ordering,
 beat-anchored image placement, image sizing/presentation, and how chapters
 and beats interleave on the client page.
+
+Also: homepage featured-strip ordering. `getFeaturedOnHome()` currently
+orders cards by collection-iteration order (client, project, skill,
+artifact, study) — incidental, not an authored order. Revisit alongside
+project/chapter ordering above rather than bolting on a separate fix.

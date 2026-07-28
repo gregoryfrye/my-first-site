@@ -39,13 +39,14 @@ export default async function ClientPage({
   const roleTitles = getRolesByClient(slug)
     .map((role) => role.title)
     .join(", ");
+  const eyebrow = [roleTitles, client.years].filter(Boolean).join(" · ");
 
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-gutter pt-40 pb-20">
       <header className="mb-16">
-        <p className="text-caption tracking-tight text-muted uppercase">
-          {roleTitles} · {client.years}
-        </p>
+        {eyebrow && (
+          <p className="text-caption tracking-tight text-muted uppercase">{eyebrow}</p>
+        )}
         <h1 className="mt-2 font-serif text-heading text-ink">{client.name}</h1>
         <p className="mt-6 text-body text-muted">{client.summary}</p>
       </header>
