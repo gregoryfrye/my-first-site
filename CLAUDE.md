@@ -4,36 +4,47 @@ Conventions for this repo. Read before touching content or styling.
 
 ## Content
 
-- All content lives in `/content`. It is the source of truth — nothing gets
-  duplicated into `/public`; images are served at request time by
-  `app/content-images/[...segments]/route.ts` reading straight from
-  `/content`.
-- Each case study is a folder: `/content/<slug>/index.mdx` plus an
-  `/content/<slug>/images` subfolder.
-  - `index.mdx` frontmatter: `title`, `role`, `years`, `featured`, `summary`,
-    optional `stats`.
-  - Image filenames are prefixed `01-`, `02-`, etc. Prefix order is display
-    order — `lib/content.ts` sorts the `/images` folder by filename.
-  - `stats` is an optional array of `{ value, label }`. Renders as a
-    horizontal stat row between the summary and the body. Three max, by
-    design — the template truncates past that. Omit the field entirely if a
-    case study has no stats; the row doesn't render.
-- `lib/content.ts` is the only code that reads `/content`. Parses frontmatter
-  with `gray-matter`. Exposes `getAllCaseStudies`, `getCaseStudyBySlug`,
-  `getFeaturedCaseStudy`, `getCaseStudyImages`. Add new content readers there,
-  not inline in pages.
-- `content/roles.ts` exports the `roles` array (company, title, years,
-  location, clients, description, optional `slug`). A `slug` must match a
-  `/content` folder — that's what makes a role linkable from the landing
-  page's roles index.
+All content lives in `/content`, organized into six typed collections. It is
+the source of truth — nothing gets duplicated into `/public`; images are
+served at request time by `app/content-images/[...segments]/route.ts` reading
+straight from `/content`.
 
-### Where this is headed
+The model: **roles → clients → projects**, with **skills** attached to
+projects, and **studies** (inputs) / **artifacts** (outputs) attached to
+projects or clients. Every cross-entity reference is a slug in frontmatter —
+never copy-pasted text. `lib/content.ts` is the only code that reads
+`/content`; it exposes a getter and `getAllX` for each collection, plus the
+join functions (`getProjectsByClient`, `getProjectsByRole`,
+`getProjectsBySkill`, `getClientsByRole`, `getRolesByClient`) and
+`validateContentGraph()`, which warns at build time on any slug reference
+that doesn't resolve. Call it, don't silently ignore broken refs.
 
-Content will grow into a linked structure: **roles → clients → projects**,
-with **studies** (inputs) and **artifacts** (outputs) attached to projects via
-slug references in frontmatter — not by copy-pasting text between entities.
-When adding entity types, follow that pattern: reference by slug, never
-duplicate content across entities.
+- **Roles** — `/content/roles/<slug>.mdx`, flat files, one per era.
+  Frontmatter: `company`, `title`, `years`, `location`, `clients` (slugs
+  into `/content/clients`, where an entity exists), `names` (plain text for
+  clients with no entity), `description`.
+- **Clients** — `/content/clients/<slug>/index.mdx` + `/images`. **Clients
+  are case studies** — the five beats (see Copy tone) live here, at the
+  client level, nowhere else. Frontmatter: `name`, `years`, `roles` (slugs),
+  `featured`, `summary`, `stats`.
+- **Projects** — `/content/projects/<slug>/index.mdx` + `/images`.
+  **Projects are chapters**, not case studies: no beats, no duplicating the
+  client's story. Frontmatter: `title`, `client` (slug), `role` (slug),
+  `year`, `skills` (slugs), `summary`. Body: scope and process notes.
+- **Skills** — `/content/skills/<slug>.mdx`, flat files. Frontmatter:
+  `name`, `summary`. No body.
+- **Studies** (inputs) — `/content/studies/<slug>/index.mdx`. Frontmatter:
+  `title`, `summary`, optional `projects`/`clients` (slugs).
+- **Artifacts** (outputs) — `/content/artifacts/<slug>/index.mdx`.
+  Frontmatter: `title`, `type`, `project` (slug), `images`.
+
+Image filenames are prefixed `01-`, `02-`, etc. — prefix order is display
+order; `lib/content.ts` sorts each `/images` folder by filename.
+
+**Entities are earned by content.** Create an entity file only when there's a
+real case study, project, study, or artifact behind it. A name with nothing
+behind it is plain text (a role's `names[]`, unlinked text elsewhere) — never
+a stub entity, and never a link to a route that doesn't exist.
 
 ## Copy tone
 
@@ -43,9 +54,10 @@ Declarative doesn't mean flat: a named tension or a stated bet is strategic
 content. The rule targets mood-language (shepherding, resonance, journey),
 not thesis statements.
 
-Case studies follow five beats: Situation, Complication, Ask, Approach,
-Outcome. Each beat is 1–2 declarative sentences. The Approach states a
-strategic decision, not a process.
+Case studies (clients) follow five beats: Situation, Complication, Ask,
+Approach, Outcome. Each beat is 1–2 declarative sentences. The Approach
+states a strategic decision, not a process. Projects don't get beats — see
+Content.
 
 ## Styling
 
@@ -67,3 +79,9 @@ from a Figma sketch later):
 This is a small, git-native site. Don't add content types, components, or
 systems (captions, tagging, search, CMS UI) beyond what a task explicitly
 asks for.
+
+## Phase 1.5
+
+Case study flow session — solve together: project/chapter ordering,
+beat-anchored image placement, image sizing/presentation, and how chapters
+and beats interleave on the client page.
