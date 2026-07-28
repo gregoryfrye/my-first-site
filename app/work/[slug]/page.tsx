@@ -2,10 +2,12 @@ import type { ComponentPropsWithoutRef } from "react";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { MDXRemote } from "next-mdx-remote/rsc";
+import { ProjectCard } from "@/app/components/project-card";
 import {
   getAllClients,
   getClientBySlug,
   getClientImages,
+  getProjectCardImage,
   getProjectsByClient,
   getRolesByClient,
 } from "@/lib/content";
@@ -84,13 +86,24 @@ export default async function ClientPage({
       {projects.length > 0 && (
         <section aria-label="Projects" className="mt-20">
           <h2 className="font-serif text-lg text-ink">Projects</h2>
-          <ul className="mt-6 flex flex-col gap-8">
-            {projects.map((project) => (
-              <li key={project.slug}>
-                <h3 className="font-serif text-body text-ink">{project.title}</h3>
-                <p className="mt-1 text-body text-muted">{project.summary}</p>
-              </li>
-            ))}
+          <ul className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
+            {projects.map((project) => {
+              const image = getProjectCardImage(project);
+              return (
+                <li key={project.slug}>
+                  <ProjectCard
+                    title={project.title}
+                    summary={project.summary}
+                    clientName={client.name}
+                    imageSrc={
+                      image
+                        ? `/content-images/projects/${project.slug}/images/${image}`
+                        : undefined
+                    }
+                  />
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}

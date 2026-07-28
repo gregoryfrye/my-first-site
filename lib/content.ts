@@ -55,6 +55,9 @@ export type Project = {
   skills: string[];
   summary: string;
   content: string;
+  featured?: boolean;
+  /** Filename within this project's /images folder. */
+  featuredImage?: string;
 };
 
 export type Skill = {
@@ -199,6 +202,8 @@ export function getProjectBySlug(slug: string): Project | null {
     skills: (data.skills as string[] | undefined) ?? [],
     summary: data.summary as string,
     content,
+    featured: data.featured as boolean | undefined,
+    featuredImage: data.featuredImage as string | undefined,
   };
 }
 
@@ -206,8 +211,26 @@ export function getProjectImages(slug: string): string[] {
   return listImageFiles(path.join(PROJECTS_DIR, slug, "images"));
 }
 
+/** featuredImage → first image by filename order → undefined (text-only card). */
+export function getProjectCardImage(project: Project): string | undefined {
+  return project.featuredImage ?? getProjectImages(project.slug)[0];
+}
+
 export function getProjectsByClient(clientSlug: string): Project[] {
   return getAllProjects().filter((project) => project.client === clientSlug);
+}
+
+/**
+ * featured: true on a project wins. Otherwise, the first project (by
+ * current sort) belonging to the featured client.
+ */
+export function getFeaturedProject(): Project | null {
+  const explicit = getAllProjects().find((project) => project.featured);
+  if (explicit) return explicit;
+
+  const client = getFeaturedClient();
+  if (!client) return null;
+  return getProjectsByClient(client.slug)[0] ?? null;
 }
 
 export function getProjectsByRole(roleSlug: string): Project[] {
