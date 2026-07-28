@@ -4,12 +4,19 @@ import matter from "gray-matter";
 
 const CONTENT_DIR = path.join(process.cwd(), "content");
 
+export type Stat = {
+  value: string;
+  label: string;
+};
+
 export type CaseStudyFrontmatter = {
   title: string;
   role: string;
   years: string;
   featured?: boolean;
   summary: string;
+  /** Three max, by design. */
+  stats?: Stat[];
 };
 
 export type CaseStudy = {

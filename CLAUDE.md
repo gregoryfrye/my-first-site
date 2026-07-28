@@ -10,9 +10,14 @@ Conventions for this repo. Read before touching content or styling.
   `/content`.
 - Each case study is a folder: `/content/<slug>/index.mdx` plus an
   `/content/<slug>/images` subfolder.
-  - `index.mdx` frontmatter: `title`, `role`, `years`, `featured`, `summary`.
+  - `index.mdx` frontmatter: `title`, `role`, `years`, `featured`, `summary`,
+    optional `stats`.
   - Image filenames are prefixed `01-`, `02-`, etc. Prefix order is display
     order — `lib/content.ts` sorts the `/images` folder by filename.
+  - `stats` is an optional array of `{ value, label }`. Renders as a
+    horizontal stat row between the summary and the body. Three max, by
+    design — the template truncates past that. Omit the field entirely if a
+    case study has no stats; the row doesn't render.
 - `lib/content.ts` is the only code that reads `/content`. Parses frontmatter
   with `gray-matter`. Exposes `getAllCaseStudies`, `getCaseStudyBySlug`,
   `getFeaturedCaseStudy`, `getCaseStudyImages`. Add new content readers there,

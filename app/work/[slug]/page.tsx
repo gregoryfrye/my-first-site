@@ -1,6 +1,5 @@
 import type { ComponentPropsWithoutRef } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import {
@@ -35,17 +34,26 @@ export default async function CaseStudyPage({
 
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-gutter pt-40 pb-20">
-      <Link href="/" className="text-caption text-muted no-underline hover:text-ink">
-        ← Greg Frye
-      </Link>
-
-      <header className="mt-12 mb-16">
+      <header className="mb-16">
         <p className="text-caption tracking-tight text-muted uppercase">
           {study.frontmatter.role} · {study.frontmatter.years}
         </p>
         <h1 className="mt-2 font-serif text-heading text-ink">{study.frontmatter.title}</h1>
         <p className="mt-6 text-body text-muted">{study.frontmatter.summary}</p>
       </header>
+
+      {study.frontmatter.stats && study.frontmatter.stats.length > 0 && (
+        <section aria-label="Stats" className="mb-16 grid grid-cols-1 gap-6 sm:grid-cols-3">
+          {study.frontmatter.stats.slice(0, 3).map((stat) => (
+            <div key={stat.label}>
+              <p className="font-serif text-heading text-ink">{stat.value}</p>
+              <p className="mt-1 text-caption tracking-tight text-muted uppercase">
+                {stat.label}
+              </p>
+            </div>
+          ))}
+        </section>
+      )}
 
       <article>
         <MDXRemote source={study.content} components={mdxComponents} />
