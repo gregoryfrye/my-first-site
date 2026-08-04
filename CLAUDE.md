@@ -93,6 +93,18 @@ from a Figma sketch later):
 - Fonts: `font-serif` (primary), `font-sans` (secondary)
 - Type scale: `text-display`, `text-heading`, `text-body`, `text-caption`
 - Spacing: `spacing-nav`, `spacing-gutter`
+- Containers: `container-wide` (`max-w-wide`, ~1152px), `container-prose`
+  (`max-w-prose`, 672px)
+
+**Two-container rule.** `max-w-wide` is for layout — anything with real
+horizontal structure: the hero, the featured strip, the roles index (its
+multi-column rows need the room), nav, footer. `max-w-prose` is for
+continuous text — case study beats/body and any future MDX content. A page
+can nest both: on `/work/[slug]`, the outer container is wide, but the
+header and the beats article each get their own `mx-auto max-w-prose`
+wrapper so the prose stays at reading width while stats and the gallery use
+the full wide container. Don't put multi-column or grid content inside
+`max-w-prose` — that's exactly the illegibility this rule exists to prevent.
 
 ## Scope discipline
 

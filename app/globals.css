@@ -32,6 +32,10 @@
   /* Spacing rhythm */
   --spacing-nav: 1.25rem;
   --spacing-gutter: 2rem;
+
+  /* Containers — layout (wide) vs. reading measure (prose). See CLAUDE.md. */
+  --container-wide: 72rem; /* ~1152px, max-w-6xl equivalent */
+  --container-prose: 42rem; /* 672px, the site's reading measure */
 }
 
 @layer base {

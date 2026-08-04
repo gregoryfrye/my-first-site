@@ -42,14 +42,16 @@ export default async function ClientPage({
   const eyebrow = [roleTitles, client.years].filter(Boolean).join(" · ");
 
   return (
-    <main className="mx-auto w-full max-w-2xl flex-1 px-gutter pt-40 pb-20">
-      <header className="mb-16">
-        {eyebrow && (
-          <p className="text-caption tracking-tight text-muted uppercase">{eyebrow}</p>
-        )}
-        <h1 className="mt-2 font-serif text-heading text-ink">{client.name}</h1>
-        <p className="mt-6 text-body text-muted">{client.summary}</p>
-      </header>
+    <main className="mx-auto w-full max-w-wide flex-1 px-gutter pt-40 pb-20">
+      <div className="mx-auto max-w-prose">
+        <header className="mb-16">
+          {eyebrow && (
+            <p className="text-caption tracking-tight text-muted uppercase">{eyebrow}</p>
+          )}
+          <h1 className="mt-2 font-serif text-heading text-ink">{client.name}</h1>
+          <p className="mt-6 text-body text-muted">{client.summary}</p>
+        </header>
+      </div>
 
       {client.stats && client.stats.length > 0 && (
         <section aria-label="Stats" className="mb-16 grid grid-cols-1 gap-6 sm:grid-cols-3">
@@ -64,9 +66,11 @@ export default async function ClientPage({
         </section>
       )}
 
-      <article>
-        <MDXRemote source={client.content} components={mdxComponents} />
-      </article>
+      <div className="mx-auto max-w-prose">
+        <article>
+          <MDXRemote source={client.content} components={mdxComponents} />
+        </article>
+      </div>
 
       {images.length > 0 && (
         <section aria-label="Gallery" className="mt-20 grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -76,7 +80,7 @@ export default async function ClientPage({
                 src={`/content-images/clients/${slug}/images/${file}`}
                 alt={`${client.name} — ${file}`}
                 fill
-                sizes="(min-width: 672px) 336px, (min-width: 640px) 50vw, 100vw"
+                sizes="(min-width: 1152px) 532px, (min-width: 640px) 50vw, 100vw"
                 className="object-cover"
               />
             </div>

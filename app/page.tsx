@@ -98,7 +98,7 @@ export default function Home() {
     .filter((card): card is FeaturedCardData => card !== null);
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-20 px-gutter pt-40 pb-20">
+    <main className="mx-auto flex w-full max-w-wide flex-1 flex-col gap-20 px-gutter pt-40 pb-20">
       <section className="flex flex-col gap-gutter sm:flex-row sm:items-start sm:justify-between">
         <div className="sm:flex-1">
           <h1 className="text-left font-serif text-heading tracking-tight text-ink">
