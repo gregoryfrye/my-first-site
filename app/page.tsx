@@ -4,6 +4,7 @@ import {
   getAllRoles,
   getArtifactCardImage,
   getClientImages,
+  getClientsByRole,
   getCurrentRole,
   getFeaturedOnHome,
   getProjectCardImage,
@@ -14,6 +15,7 @@ import {
 
 type FeaturedCardData = {
   key: string;
+  kind: FeaturedEntity["kind"];
   type: string;
   title: string;
   summary: string;
@@ -26,6 +28,7 @@ function toCardData(item: FeaturedEntity): FeaturedCardData | null {
     case "client":
       return {
         key: `client-${item.client.slug}`,
+        kind: item.kind,
         type: "Client",
         title: item.client.name,
         summary: item.client.summary,
@@ -40,6 +43,7 @@ function toCardData(item: FeaturedEntity): FeaturedCardData | null {
       const image = getProjectCardImage(item.project);
       return {
         key: `project-${item.project.slug}`,
+        kind: item.kind,
         type: "Project",
         title: item.project.title,
         summary: item.project.summary,
@@ -51,6 +55,7 @@ function toCardData(item: FeaturedEntity): FeaturedCardData | null {
       const image = getSkillCardImage(item.skill);
       return {
         key: `skill-${item.skill.slug}`,
+        kind: item.kind,
         type: "Skill",
         title: item.skill.name,
         summary: item.skill.summary,
@@ -63,6 +68,7 @@ function toCardData(item: FeaturedEntity): FeaturedCardData | null {
       const image = getArtifactCardImage(item.artifact);
       return {
         key: `artifact-${item.artifact.slug}`,
+        kind: item.kind,
         type: "Artifact",
         title: item.artifact.title,
         summary: item.artifact.summary,
@@ -74,6 +80,7 @@ function toCardData(item: FeaturedEntity): FeaturedCardData | null {
       if (!item.client) return null;
       return {
         key: `study-${item.study.slug}`,
+        kind: item.kind,
         type: "Study",
         title: item.study.title,
         summary: item.study.summary,
@@ -124,43 +131,72 @@ export default function Home() {
       </section>
 
       {featuredCards.length > 0 && (
-        <section aria-label="Featured work" className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          {featuredCards.map((card) => (
-            <FeaturedCard
-              key={card.key}
-              type={card.type}
-              title={card.title}
-              summary={card.summary}
-              href={card.href}
-              imageSrc={card.imageSrc}
-            />
-          ))}
+        <section
+          aria-label="Featured work"
+          className="flex snap-x snap-mandatory items-start gap-6 overflow-x-auto pb-2"
+        >
+          {featuredCards.map((card) =>
+            card.kind === "client" ? (
+              <div key={card.key} className="w-72 shrink-0 snap-start">
+                <FeaturedCard
+                  type={card.type}
+                  title={card.title}
+                  summary={card.summary}
+                  href={card.href}
+                  imageSrc={card.imageSrc}
+                />
+              </div>
+            ) : (
+              <div key={card.key} className="max-w-40 shrink-0 snap-start">
+                <Link
+                  href={card.href}
+                  className="text-body text-ink underline decoration-border underline-offset-4 hover:decoration-ink"
+                >
+                  {card.title}
+                </Link>
+              </div>
+            ),
+          )}
         </section>
       )}
 
       <section aria-label="Roles">
         <ul className="flex flex-col">
-          {roles.map((role) => (
-            <li
-              key={role.slug}
-              className="flex flex-col gap-1 border-b border-border py-4 first:pt-0 last:border-b-0 sm:flex-row sm:items-baseline sm:gap-6"
-            >
-              <span className="text-caption text-muted sm:w-28 sm:shrink-0">{role.years}</span>
-              <span className="text-body text-ink sm:flex-1">
-                {role.title},{" "}
-                <Link
-                  href={`/roles/${role.slug}`}
-                  className="text-ink underline decoration-border underline-offset-4 hover:decoration-ink"
-                >
-                  {role.company}
-                </Link>
-                {role.names.length > 0 && (
-                  <span className="text-muted"> — {role.names.join(", ")}</span>
-                )}
-              </span>
-              <span className="text-body text-muted sm:flex-1">{role.description}</span>
-            </li>
-          ))}
+          {roles.map((role) => {
+            const clients = getClientsByRole(role.slug);
+            return (
+              <li
+                key={role.slug}
+                className="flex flex-col gap-1 border-b border-border py-4 first:pt-0 last:border-b-0 sm:flex-row sm:items-baseline sm:gap-6"
+              >
+                <span className="text-caption text-muted sm:w-28 sm:shrink-0">{role.years}</span>
+                <span className="text-body text-ink sm:flex-1">
+                  {role.title},{" "}
+                  <Link
+                    href={`/roles/${role.slug}`}
+                    className="text-ink underline decoration-border underline-offset-4 hover:decoration-ink"
+                  >
+                    {role.company}
+                  </Link>
+                </span>
+                <span className="text-body text-muted sm:flex-1">
+                  {clients.map((client, i) => (
+                    <span key={client.slug}>
+                      <Link
+                        href={`/work/${client.slug}`}
+                        className="text-ink underline decoration-border underline-offset-4 hover:decoration-ink"
+                      >
+                        {client.name}
+                      </Link>
+                      {(i < clients.length - 1 || role.names.length > 0) && ", "}
+                    </span>
+                  ))}
+                  {role.names.join(", ")}
+                </span>
+                <span className="text-body text-muted sm:flex-1">{role.description}</span>
+              </li>
+            );
+          })}
         </ul>
       </section>
     </main>
