@@ -9,12 +9,12 @@ export function Nav() {
       >
         Greg Frye
       </Link>
-      <span className="col-start-2 hidden justify-self-center text-caption tracking-tight text-muted uppercase sm:block">
+      <span className="col-start-2 hidden justify-self-center text-body tracking-tight text-muted uppercase sm:block">
         Whole World Creative Direction
       </span>
       <a
         href="mailto:gregoryfrye@gmail.com"
-        className="col-start-3 justify-self-end text-caption text-muted no-underline hover:text-ink"
+        className="col-start-3 justify-self-end text-body text-muted no-underline hover:text-ink"
       >
         gregoryfrye@gmail.com
       </a>

@@ -171,13 +171,7 @@ export default function Home() {
               >
                 <span className="text-caption text-muted sm:w-28 sm:shrink-0">{role.years}</span>
                 <span className="text-body text-ink sm:flex-1">
-                  {role.title},{" "}
-                  <Link
-                    href={`/roles/${role.slug}`}
-                    className="text-ink underline decoration-border underline-offset-4 hover:decoration-ink"
-                  >
-                    {role.company}
-                  </Link>
+                  {role.title}, <em className="italic">{role.company}</em>
                 </span>
                 <span className="text-body text-muted sm:flex-1">
                   {clients.map((client, i) => (
@@ -192,6 +186,23 @@ export default function Home() {
                     </span>
                   ))}
                   {role.names.join(", ")}
+                </span>
+                <span className="text-body text-muted sm:flex-1">
+                  {role.skills.map((skillSlug, i) => {
+                    const skill = getSkillBySlug(skillSlug);
+                    if (!skill) return null;
+                    return (
+                      <span key={skillSlug}>
+                        <Link
+                          href={`/skills/${skillSlug}`}
+                          className="text-ink underline decoration-border underline-offset-4 hover:decoration-ink"
+                        >
+                          {skill.name}
+                        </Link>
+                        {i < role.skills.length - 1 && ", "}
+                      </span>
+                    );
+                  })}
                 </span>
                 <span className="text-body text-muted sm:flex-1">{role.description}</span>
               </li>
