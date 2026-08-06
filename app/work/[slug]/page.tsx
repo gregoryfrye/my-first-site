@@ -1,13 +1,13 @@
 import type { ComponentPropsWithoutRef } from "react";
-import Image from "next/image";
 import { notFound } from "next/navigation";
 import { MDXRemote } from "next-mdx-remote/rsc";
-import { ProjectCard } from "@/app/components/project-card";
+import { ImageBlock } from "@/app/components/image-block";
+import { ProjectSection } from "@/app/components/project-section";
+import { SpineSection } from "@/app/components/spine-section";
+import { preprocessFenceBlocks, splitClientContent } from "@/lib/content-blocks";
 import {
   getAllClients,
   getClientBySlug,
-  getClientImages,
-  getProjectCardImage,
   getProjectsByClient,
   getRolesByClient,
 } from "@/lib/content";
@@ -18,11 +18,22 @@ export function generateStaticParams() {
 
 const mdxComponents = {
   h2: (props: ComponentPropsWithoutRef<"h2">) => (
-    <h2 className="mt-12 mb-3 font-serif text-lg text-ink first:mt-0" {...props} />
+    <h2 className="mx-auto mt-16 max-w-prose font-serif text-heading text-ink first:mt-0" {...props} />
   ),
   p: (props: ComponentPropsWithoutRef<"p">) => (
-    <p className="text-body text-muted" {...props} />
+    <p className="mx-auto mt-6 max-w-prose text-body text-muted first:mt-0" {...props} />
   ),
+  ul: (props: ComponentPropsWithoutRef<"ul">) => (
+    <ul
+      className="mx-auto mt-6 max-w-prose list-disc space-y-2 pl-5 text-body text-muted first:mt-0"
+      {...props}
+    />
+  ),
+  strong: (props: ComponentPropsWithoutRef<"strong">) => (
+    <strong className="text-ink" {...props} />
+  ),
+  SpineSection,
+  ImageBlock,
 };
 
 export default async function ClientPage({
@@ -34,12 +45,12 @@ export default async function ClientPage({
   const client = getClientBySlug(slug);
   if (!client) notFound();
 
-  const images = getClientImages(slug);
   const projects = getProjectsByClient(slug);
   const roleTitles = getRolesByClient(slug)
     .map((role) => role.title)
     .join(", ");
   const eyebrow = [roleTitles, client.years].filter(Boolean).join(" · ");
+  const { narrative, closing } = splitClientContent(client.content);
 
   return (
     <main className="mx-auto w-full max-w-wide flex-1 px-gutter pt-40 pb-20">
@@ -66,51 +77,27 @@ export default async function ClientPage({
         </section>
       )}
 
-      <div className="mx-auto max-w-prose">
-        <article>
-          <MDXRemote source={client.content} components={mdxComponents} />
-        </article>
-      </div>
-
-      {images.length > 0 && (
-        <section aria-label="Gallery" className="mt-20 grid grid-cols-1 gap-6 sm:grid-cols-2">
-          {images.map((file) => (
-            <div key={file} className="relative aspect-[4/3] overflow-hidden bg-border">
-              <Image
-                src={`/content-images/clients/${slug}/images/${file}`}
-                alt={`${client.name} — ${file}`}
-                fill
-                sizes="(min-width: 1152px) 532px, (min-width: 640px) 50vw, 100vw"
-                className="object-cover"
-              />
-            </div>
-          ))}
-        </section>
-      )}
+      <article>
+        <MDXRemote source={preprocessFenceBlocks(narrative)} components={mdxComponents} />
+      </article>
 
       {projects.length > 0 && (
-        <section aria-label="Projects" className="mt-20">
-          <h2 className="font-serif text-lg text-ink">Projects</h2>
-          <ul className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
-            {projects.map((project) => {
-              const image = getProjectCardImage(project);
-              return (
-                <li key={project.slug}>
-                  <ProjectCard
-                    title={project.title}
-                    summary={project.summary}
-                    clientName={client.name}
-                    imageSrc={
-                      image
-                        ? `/content-images/projects/${project.slug}/images/${image}`
-                        : undefined
-                    }
-                  />
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+        <div aria-label="Projects">
+          {projects.map((project) => (
+            <ProjectSection key={project.fullSlug} title={project.title}>
+              <MDXRemote
+                source={preprocessFenceBlocks(project.content)}
+                components={mdxComponents}
+              />
+            </ProjectSection>
+          ))}
+        </div>
+      )}
+
+      {closing && (
+        <div className="mt-20">
+          <MDXRemote source={preprocessFenceBlocks(closing)} components={mdxComponents} />
+        </div>
       )}
     </main>
   );

@@ -48,7 +48,9 @@ function toCardData(item: FeaturedEntity): FeaturedCardData | null {
         title: item.project.title,
         summary: item.project.summary,
         href: `/work/${item.client.slug}`,
-        imageSrc: image ? `/content-images/projects/${item.project.slug}/images/${image}` : undefined,
+        imageSrc: image
+          ? `/content-images/clients/${item.client.slug}/projects/${item.project.slug}/images/${image}`
+          : undefined,
       };
     }
     case "skill": {
@@ -73,7 +75,9 @@ function toCardData(item: FeaturedEntity): FeaturedCardData | null {
         title: item.artifact.title,
         summary: item.artifact.summary,
         href: `/work/${item.client.slug}`,
-        imageSrc: image ? `/content-images/artifacts/${item.artifact.slug}/images/${image}` : undefined,
+        imageSrc: image
+          ? `/content-images/clients/${item.artifact.client}/projects/${item.artifact.project}/artifacts/${item.artifact.slug}/images/${image}`
+          : undefined,
       };
     }
     case "study": {

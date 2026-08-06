@@ -9,16 +9,48 @@ the source of truth — nothing gets duplicated into `/public`; images are
 served at request time by `app/content-images/[...segments]/route.ts` reading
 straight from `/content`.
 
-The model: **roles → clients → projects**, with **skills** attached to
-projects (and to the current role), and **studies** (inputs) / **artifacts**
-(outputs) attached to projects or clients. Every cross-entity reference is a
-slug in frontmatter — never copy-pasted text. `lib/content.ts` is the only
-code that reads `/content`; it exposes a getter and `getAllX` for each
-collection, plus the join functions (`getProjectsByClient`,
-`getProjectsByRole`, `getProjectsBySkill`, `getClientsByRole`,
-`getRolesByClient`, `getFeaturedOnHome`) and `validateContentGraph()`, which
-warns at build time on any slug reference that doesn't resolve. Call it,
-don't silently ignore broken refs.
+The model: **roles → clients → projects → artifacts**, with **skills**
+attached to projects (client-level skills derive as the union — never
+authored directly), and **studies** (inputs) as peers to clients, not
+children. Every cross-entity reference is a slug in frontmatter — never
+copy-pasted text. `lib/content.ts` is the only code that reads `/content`;
+it exposes a getter and `getAllX` for each collection, plus the join
+functions (`getProjectsByClient`, `getProjectsByRole`, `getProjectsBySkill`,
+`getClientsByRole`, `getRolesByClient`, `getClientSkills`,
+`getFeaturedOnHome`) and `validateContentGraph()`, which warns at build time
+on any slug reference that doesn't resolve. Call it, don't silently ignore
+broken refs.
+
+**Projects and artifacts nest inside their owning client** — you work one
+case study at a time, and flat top-level `projects/`/`artifacts/`
+directories force jumping between trees to edit one story:
+
+```
+content/
+  clients/
+    hudson-cannabis/
+      index.mdx
+      images/
+      projects/
+        brand-identity-narrative/
+          index.mdx
+          images/
+          artifacts/
+```
+
+A project's `client`/`slug` and an artifact's `client`/`project`/`slug` are
+all derived from the path at read time — never authored in frontmatter.
+
+**Slug resolution — short form vs. full form.** A project's short slug
+(`brand-identity-narrative`) is valid only *within* its own client; multiple
+clients can and will have projects with the same short slug. Its full slug
+(`hudson-cannabis/brand-identity-narrative`) is globally unique and required
+for any reference from outside that client's directory — most importantly
+**studies**, which are peers to clients and have no containing client to
+resolve a short slug against. `getProjectBySlug(slug, contextClientSlug?)`
+implements this: full form always resolves; short form only resolves with a
+context client. `validateContentGraph()` flags a short-form project
+reference from a study as ambiguous.
 
 - **Roles** — `/content/roles/<slug>.mdx`, flat files, one per era.
   Frontmatter: `company`, `title`, `years`, `location`, `clients` (slugs
@@ -29,24 +61,30 @@ don't silently ignore broken refs.
   client is declared on both sides (role's `clients[]` and client's
   `roles[]`) — keep them in sync or joins silently return nothing.
 - **Clients** — `/content/clients/<slug>/index.mdx` + `/images`. **Clients
-  are case studies** — the five beats (see Copy tone) live here, at the
-  client level, nowhere else. Frontmatter: `name`, optional `years` (not
+  are case studies** — the narrative spine (see Copy tone) lives here, at
+  the client level, nowhere else. Frontmatter: `name`, optional `years` (not
   every client has a defined era), `roles` (slugs), `summary`, `stats`,
-  optional `featuredOnHome`.
-- **Projects** — `/content/projects/<slug>/index.mdx` + `/images`.
-  **Projects are chapters**, not case studies: no beats, no duplicating the
-  client's story. Frontmatter: `title`, `client` (slug), `role` (slug),
-  optional `year`, `skills` (slugs), `summary`, optional `featuredImage`,
-  optional `featuredOnHome`. Body: scope and process notes.
+  optional `featuredOnHome`, optional `projects` (short-form slugs, in
+  **authored display order** — a project on disk but missing here, or vice
+  versa, is a `validateContentGraph` warning).
+- **Projects** — `/content/clients/<client>/projects/<slug>/index.mdx` +
+  `/images` + `/artifacts`. **Projects are chapters**, not case studies: no
+  spine, no duplicating the client's story — and since projects don't have
+  their own route, each must also work read inline on the client page.
+  Frontmatter: `title`, `role` (slug), optional `year`, `skills` (slugs),
+  `summary`, optional `featuredImage`, optional `featuredOnHome`. Body:
+  scope and process notes, using the fence-block image primitives below.
 - **Skills** — `/content/skills/<slug>/index.mdx` + `/images`. Frontmatter:
   `name`, `summary`, optional `featuredImage`, optional `featuredOnHome`. No
   body.
-- **Studies** (inputs) — `/content/studies/<slug>/index.mdx`. Frontmatter:
-  `title`, `summary`, optional `projects`/`clients` (slugs), optional
-  `featuredOnHome`.
-- **Artifacts** (outputs) — `/content/artifacts/<slug>/index.mdx` +
-  `/images`. Frontmatter: `title`, `type`, `summary`, `project` (slug),
-  optional `featuredImage`, optional `featuredOnHome`.
+- **Studies** (inputs) — `/content/studies/<slug>/index.mdx`. **Peers to
+  clients, not children.** Frontmatter: `title`, `summary`, optional
+  `clients` (slugs), optional `projects` (full-form slugs — required, see
+  slug resolution above), optional `featuredOnHome`.
+- **Artifacts** (outputs) —
+  `/content/clients/<client>/projects/<project>/artifacts/<slug>/index.mdx`
+  + `/images`. Frontmatter: `title`, `type`, `summary`, optional
+  `featuredImage`, optional `featuredOnHome`.
 
 Image filenames are prefixed `01-`, `02-`, etc. — prefix order is display
 order; `lib/content.ts` sorts each `/images` folder by filename. Clients,
@@ -54,6 +92,41 @@ projects, skills, and artifacts all follow the same image fallback chain:
 `featuredImage` (a filename in that entity's `/images`) → first image by
 filename order → no image, text-only card. Never an error, never broken
 layout space.
+
+**Fence-block image primitives.** Inside a client's or project's MDX body,
+mark image placement with a `::: type` fence:
+
+```
+::: pair
+1. Cannabis plant against open sky
+2. Greenhouse canopy, overhead
+Caption: Sun-grown, living soil, hand-trimmed.
+:::
+```
+
+`lib/content-blocks.ts`'s `preprocessFenceBlocks()` rewrites these into
+`<ImageBlock>` tags before the source reaches `MDXRemote` — always run it on
+`client.content` and each `project.content`. Props travel as a single
+URL-encoded JSON string attribute, not expression-valued props
+(`images={[...]}`) — MDX's expression parser doesn't reliably round-trip
+array literals injected this way when nested inside another custom
+component's children. Six types are recognized:
+
+| Type | Behavior |
+|---|---|
+| `full` | Full-bleed single image, breaks the text column (wide container) |
+| `pair` | Two side by side, equal width, stack on mobile (wide container) |
+| `inset` | Single image inline in the text column, no break (prose container) |
+| `stagger` | v1: vertical stack. Later: 2–3 offset images at different scales |
+| `scroll` | v1: vertical stack. Later: horizontal scroll-snap strip |
+| `motion` | v1: vertical stack (poster frame). Later: silent autoplay loop |
+
+Every block takes an optional caption, styled as content, not metadata. No
+real images exist yet for any block — `ImageBlock` renders a placeholder
+showing the description text so layout can be evaluated before assets land.
+Upgrading a stubbed type (`stagger`/`scroll`/`motion`) to its real behavior
+is a component swap in `app/components/image-block.tsx`, not a content
+migration — the fence syntax and props don't change.
 
 **Homepage featured strip.** Set `featuredOnHome: true` on any client,
 project, skill, artifact, or study to put it in the homepage strip —
@@ -74,10 +147,28 @@ Declarative doesn't mean flat: a named tension or a stated bet is strategic
 content. The rule targets mood-language (shepherding, resonance, journey),
 not thesis statements.
 
-Case studies (clients) follow five beats: Situation, Complication, Ask,
-Approach, Outcome. Each beat is 1–2 declarative sentences. The Approach
-states a strategic decision, not a process. Projects don't get beats — see
-Content.
+**Case studies (clients) have two content tiers, and the reader must feel
+the mode change between them.**
+
+*Narrative (the spine)* — the argument. Text-led, fast, short sections,
+authored via `<SpineSection label="..." subhead="...">` directly in the
+client's MDX body. `label` is a reusable functional marker (Context,
+Complication, The Turn, Approach, Positioning, Market Thesis, Entry, or
+whatever a future case study needs) — keep the label vocabulary consistent
+across case studies. `subhead` is project-specific prose, one line.
+
+*Projects (the evidence)* — image-forward, named units, nested under their
+client (see Content). Rendered inline via `<ProjectSection title="...">` —
+assume nobody clicks through to a project's own page; each must work
+standalone in the flow. No spine labels here, just a title and body.
+
+`Results` (typographic, no images) and `Credits` close the page as plain
+`##` sections in the client's MDX body, after the spine and separate from
+the interleaved projects. Projects render between the spine and Results —
+`lib/content-blocks.ts`'s `splitClientContent()` splits the client's body at
+the `## Results` heading so the page template can insert the projects loop
+between the two halves. A client with no `## Results` heading just renders
+its whole body as spine, no closing section.
 
 ## Styling
 
@@ -99,12 +190,14 @@ from a Figma sketch later):
 **Two-container rule.** `max-w-wide` is for layout — anything with real
 horizontal structure: the hero, the featured strip, the roles index (its
 multi-column rows need the room), nav, footer. `max-w-prose` is for
-continuous text — case study beats/body and any future MDX content. A page
-can nest both: on `/work/[slug]`, the outer container is wide, but the
-header and the beats article each get their own `mx-auto max-w-prose`
-wrapper so the prose stays at reading width while stats and the gallery use
-the full wide container. Don't put multi-column or grid content inside
-`max-w-prose` — that's exactly the illegibility this rule exists to prevent.
+continuous text — the case study header, the spine's prose, and any future
+MDX content. A page can nest both: on `/work/[slug]`, the outer container is
+wide, but the header and every text-bearing MDX element (`p`, `h2`, `ul`)
+self-center to `max-w-prose`, while stats and the `full`/`pair`/`stagger`/
+`scroll`/`motion` image blocks use the full wide container (`inset` stays at
+`max-w-prose`, matching the surrounding text — see the fence-block table in
+Content). Don't put multi-column or grid content inside `max-w-prose` —
+that's exactly the illegibility this rule exists to prevent.
 
 ## Scope discipline
 
@@ -114,11 +207,20 @@ asks for.
 
 ## Phase 1.5
 
-Case study flow session — solve together: project/chapter ordering,
-beat-anchored image placement, image sizing/presentation, and how chapters
-and beats interleave on the client page.
+Resolved by the case-study rebuild (nested projects, `client.projects[]`,
+`<SpineSection>`/`<ProjectSection>`, fence-block images): project/chapter
+ordering, beat-anchored image placement, and how the spine and projects
+interleave on the client page.
 
-Also: homepage featured-strip ordering. `getFeaturedOnHome()` currently
-orders cards by collection-iteration order (client, project, skill,
-artifact, study) — incidental, not an authored order. Revisit alongside
-project/chapter ordering above rather than bolting on a separate fix.
+Still open:
+
+- Upgrade `stagger`/`scroll`/`motion` image blocks from their v1
+  vertical-stack stub to real behavior (offset stack, horizontal
+  scroll-snap, silent autoplay loop) — do this once there's real content to
+  evaluate them against, not before.
+- Homepage featured-strip ordering. `getFeaturedOnHome()` still orders cards
+  by collection-iteration order (client, project, skill, artifact, study) —
+  incidental, not an authored order.
+- Wire real photography into Hudson Cannabis's fence blocks. A batch already
+  sits in `content/clients/hudson-cannabis/images/_/`, unmapped to specific
+  blocks — needs a deliberate pass, not a guess.

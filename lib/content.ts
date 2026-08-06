@@ -5,10 +5,8 @@ import matter from "gray-matter";
 const CONTENT_DIR = path.join(process.cwd(), "content");
 const ROLES_DIR = path.join(CONTENT_DIR, "roles");
 const CLIENTS_DIR = path.join(CONTENT_DIR, "clients");
-const PROJECTS_DIR = path.join(CONTENT_DIR, "projects");
 const SKILLS_DIR = path.join(CONTENT_DIR, "skills");
 const STUDIES_DIR = path.join(CONTENT_DIR, "studies");
-const ARTIFACTS_DIR = path.join(CONTENT_DIR, "artifacts");
 
 export type Stat = {
   value: string;
@@ -32,7 +30,7 @@ export type Role = {
   current?: boolean;
 };
 
-/** A client is the case study entity — the five beats live here. */
+/** A client is the case study entity — the narrative spine lives here. */
 export type Client = {
   slug: string;
   name: string;
@@ -45,14 +43,22 @@ export type Client = {
   stats?: Stat[];
   content: string;
   featuredOnHome?: boolean;
+  /**
+   * Short-form project slugs, in authored display order. A project on disk
+   * but missing here (or vice versa) is a validateContentGraph warning.
+   */
+  projects?: string[];
 };
 
-/** A project is a chapter within a client's story — no beats. */
+/** A project is a chapter within a client's story — no beats, nested under its client. */
 export type Project = {
+  /** Short form, unique within the owning client only. */
   slug: string;
-  title: string;
-  /** Slug into /content/clients. */
+  /** `${client}/${slug}` — globally unique, required for cross-client references. */
+  fullSlug: string;
+  /** Owning client slug, derived from directory nesting. */
   client: string;
+  title: string;
   /** Slug into /content/roles. */
   role: string;
   /** Not every project has a defined era. */
@@ -75,24 +81,30 @@ export type Skill = {
   featuredOnHome?: boolean;
 };
 
-/** Inputs. */
+/** Inputs. Peers to clients, not children. */
 export type Study = {
   slug: string;
   title: string;
   summary: string;
+  /** Full-form (`client/project`) references — required, since a study has no containing client. */
   projects?: string[];
   clients?: string[];
   featuredOnHome?: boolean;
 };
 
-/** Outputs. */
+/** Outputs, nested under their owning project. */
 export type Artifact = {
+  /** Short form, unique within the owning project only. */
   slug: string;
+  /** `${client}/${project}/${slug}` — globally unique. */
+  fullSlug: string;
+  /** Owning client slug, derived from directory nesting. */
+  client: string;
+  /** Owning project slug (short form), derived from directory nesting. */
+  project: string;
   title: string;
   type: string;
   summary: string;
-  /** Slug into /content/projects. */
-  project: string;
   /** Filename within this artifact's /images folder. */
   featuredImage?: string;
   featuredOnHome?: boolean;
@@ -121,7 +133,7 @@ function listFlatSlugs(dir: string): string[] {
     .map((file) => file.replace(/\.mdx$/, ""));
 }
 
-/** Slugs of <slug>/index.mdx folders inside a collection folder (clients, projects, studies, artifacts). */
+/** Slugs of <slug>/index.mdx folders inside a collection folder. */
 function listFolderSlugs(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
   return fs
@@ -198,6 +210,7 @@ export function getClientBySlug(slug: string): Client | null {
     stats: data.stats as Stat[] | undefined,
     content,
     featuredOnHome: data.featuredOnHome as boolean | undefined,
+    projects: data.projects as string[] | undefined,
   };
 }
 
@@ -205,22 +218,32 @@ export function getClientImages(slug: string): string[] {
   return listImageFiles(path.join(CLIENTS_DIR, slug, "images"));
 }
 
-// --- projects ---
-
-export function getAllProjects(): Project[] {
-  return listFolderSlugs(PROJECTS_DIR)
-    .map((slug) => getProjectBySlug(slug))
-    .filter((project): project is Project => project !== null);
+/** Union of this client's projects' skills, resolved to Skill objects. Derived, never authored. */
+export function getClientSkills(clientSlug: string): Skill[] {
+  const slugs = new Set<string>();
+  for (const project of getProjectsByClient(clientSlug)) {
+    for (const skillSlug of project.skills) slugs.add(skillSlug);
+  }
+  return [...slugs]
+    .map((slug) => getSkillBySlug(slug))
+    .filter((skill): skill is Skill => skill !== null);
 }
 
-export function getProjectBySlug(slug: string): Project | null {
-  const parsed = readMdx(path.join(PROJECTS_DIR, slug, "index.mdx"));
+// --- projects (nested under their client) ---
+
+function projectsDirFor(clientSlug: string): string {
+  return path.join(CLIENTS_DIR, clientSlug, "projects");
+}
+
+function readProject(clientSlug: string, projectSlug: string): Project | null {
+  const parsed = readMdx(path.join(projectsDirFor(clientSlug), projectSlug, "index.mdx"));
   if (!parsed) return null;
   const { data, content } = parsed;
   return {
-    slug,
+    slug: projectSlug,
+    fullSlug: `${clientSlug}/${projectSlug}`,
+    client: clientSlug,
     title: data.title as string,
-    client: data.client as string,
     role: data.role as string,
     year: data.year as string | undefined,
     skills: (data.skills as string[] | undefined) ?? [],
@@ -231,17 +254,55 @@ export function getProjectBySlug(slug: string): Project | null {
   };
 }
 
-export function getProjectImages(slug: string): string[] {
-  return listImageFiles(path.join(PROJECTS_DIR, slug, "images"));
+export function getAllProjects(): Project[] {
+  const projects: Project[] = [];
+  for (const clientSlug of listFolderSlugs(CLIENTS_DIR)) {
+    for (const projectSlug of listFolderSlugs(projectsDirFor(clientSlug))) {
+      const project = readProject(clientSlug, projectSlug);
+      if (project) projects.push(project);
+    }
+  }
+  return projects;
+}
+
+/**
+ * Resolves a project reference in either form:
+ * - full form (`client/project`) — always unambiguous, works anywhere
+ * - short form (`project`) — only valid relative to a containing client;
+ *   without contextClientSlug it's ambiguous and resolves to null
+ */
+export function getProjectBySlug(slug: string, contextClientSlug?: string): Project | null {
+  if (slug.includes("/")) {
+    const [clientSlug, projectSlug] = slug.split("/");
+    return readProject(clientSlug, projectSlug);
+  }
+  if (contextClientSlug) {
+    return readProject(contextClientSlug, slug);
+  }
+  return null;
+}
+
+export function getProjectImages(clientSlug: string, projectSlug: string): string[] {
+  return listImageFiles(path.join(projectsDirFor(clientSlug), projectSlug, "images"));
 }
 
 /** featuredImage → first image by filename order → undefined (text-only card). */
 export function getProjectCardImage(project: Project): string | undefined {
-  return project.featuredImage ?? getProjectImages(project.slug)[0];
+  return project.featuredImage ?? getProjectImages(project.client, project.slug)[0];
 }
 
+/**
+ * A client's projects in authored display order (client.projects[]), falling
+ * back to directory order for anything on disk but not listed.
+ */
 export function getProjectsByClient(clientSlug: string): Project[] {
-  return getAllProjects().filter((project) => project.client === clientSlug);
+  const client = getClientBySlug(clientSlug);
+  const onDisk = listFolderSlugs(projectsDirFor(clientSlug));
+  const order = client?.projects?.filter((slug) => onDisk.includes(slug)) ?? [];
+  const unlisted = onDisk.filter((slug) => !order.includes(slug));
+  return [...order, ...unlisted]
+    .map((slug) => readProject(clientSlug, slug))
+    .filter((project): project is Project => project !== null);
 }
 
 export function getProjectsByRole(roleSlug: string): Project[] {
@@ -250,6 +311,55 @@ export function getProjectsByRole(roleSlug: string): Project[] {
 
 export function getProjectsBySkill(skillSlug: string): Project[] {
   return getAllProjects().filter((project) => project.skills.includes(skillSlug));
+}
+
+// --- artifacts (nested under their project) ---
+
+function artifactsDirFor(clientSlug: string, projectSlug: string): string {
+  return path.join(projectsDirFor(clientSlug), projectSlug, "artifacts");
+}
+
+function readArtifact(clientSlug: string, projectSlug: string, artifactSlug: string): Artifact | null {
+  const parsed = readMdx(path.join(artifactsDirFor(clientSlug, projectSlug), artifactSlug, "index.mdx"));
+  if (!parsed) return null;
+  const { data } = parsed;
+  return {
+    slug: artifactSlug,
+    fullSlug: `${clientSlug}/${projectSlug}/${artifactSlug}`,
+    client: clientSlug,
+    project: projectSlug,
+    title: data.title as string,
+    type: data.type as string,
+    summary: data.summary as string,
+    featuredImage: data.featuredImage as string | undefined,
+    featuredOnHome: data.featuredOnHome as boolean | undefined,
+  };
+}
+
+export function getAllArtifacts(): Artifact[] {
+  const artifacts: Artifact[] = [];
+  for (const project of getAllProjects()) {
+    for (const artifactSlug of listFolderSlugs(artifactsDirFor(project.client, project.slug))) {
+      const artifact = readArtifact(project.client, project.slug, artifactSlug);
+      if (artifact) artifacts.push(artifact);
+    }
+  }
+  return artifacts;
+}
+
+export function getArtifactsByProject(clientSlug: string, projectSlug: string): Artifact[] {
+  return listFolderSlugs(artifactsDirFor(clientSlug, projectSlug))
+    .map((slug) => readArtifact(clientSlug, projectSlug, slug))
+    .filter((artifact): artifact is Artifact => artifact !== null);
+}
+
+export function getArtifactImages(artifact: Artifact): string[] {
+  return listImageFiles(path.join(artifactsDirFor(artifact.client, artifact.project), artifact.slug, "images"));
+}
+
+/** featuredImage → first image by filename order → undefined (text-only card). */
+export function getArtifactCardImage(artifact: Artifact): string | undefined {
+  return artifact.featuredImage ?? getArtifactImages(artifact)[0];
 }
 
 // --- skills ---
@@ -282,7 +392,7 @@ export function getSkillCardImage(skill: Skill): string | undefined {
   return skill.featuredImage ?? getSkillImages(skill.slug)[0];
 }
 
-// --- studies (inputs) ---
+// --- studies (inputs, peers to clients) ---
 
 export function getAllStudies(): Study[] {
   return listFolderSlugs(STUDIES_DIR)
@@ -302,38 +412,6 @@ export function getStudyBySlug(slug: string): Study | null {
     clients: data.clients as string[] | undefined,
     featuredOnHome: data.featuredOnHome as boolean | undefined,
   };
-}
-
-// --- artifacts (outputs) ---
-
-export function getAllArtifacts(): Artifact[] {
-  return listFolderSlugs(ARTIFACTS_DIR)
-    .map((slug) => getArtifactBySlug(slug))
-    .filter((artifact): artifact is Artifact => artifact !== null);
-}
-
-export function getArtifactBySlug(slug: string): Artifact | null {
-  const parsed = readMdx(path.join(ARTIFACTS_DIR, slug, "index.mdx"));
-  if (!parsed) return null;
-  const { data } = parsed;
-  return {
-    slug,
-    title: data.title as string,
-    type: data.type as string,
-    summary: data.summary as string,
-    project: data.project as string,
-    featuredImage: data.featuredImage as string | undefined,
-    featuredOnHome: data.featuredOnHome as boolean | undefined,
-  };
-}
-
-export function getArtifactImages(slug: string): string[] {
-  return listImageFiles(path.join(ARTIFACTS_DIR, slug, "images"));
-}
-
-/** featuredImage → first image by filename order → undefined (text-only card). */
-export function getArtifactCardImage(artifact: Artifact): string | undefined {
-  return artifact.featuredImage ?? getArtifactImages(artifact.slug)[0];
 }
 
 // --- reverse joins ---
@@ -378,9 +456,12 @@ export function getFeaturedOnHome(): FeaturedEntity[] {
 
   for (const artifact of getAllArtifacts()) {
     if (artifact.featuredOnHome) {
-      const project = getProjectBySlug(artifact.project);
-      const client = project ? getClientBySlug(project.client) : null;
-      items.push({ kind: "artifact", artifact, project, client });
+      items.push({
+        kind: "artifact",
+        artifact,
+        project: getProjectBySlug(`${artifact.client}/${artifact.project}`),
+        client: getClientBySlug(artifact.client),
+      });
     }
   }
 
@@ -403,7 +484,8 @@ export function validateContentGraph(): string[] {
   const roleSlugs = new Set(getAllRoles().map((role) => role.slug));
   const clientSlugs = new Set(getAllClients().map((client) => client.slug));
   const skillSlugs = new Set(getAllSkills().map((skill) => skill.slug));
-  const projectSlugs = new Set(getAllProjects().map((project) => project.slug));
+  const allProjects = getAllProjects();
+  const projectFullSlugs = new Set(allProjects.map((project) => project.fullSlug));
 
   for (const role of getAllRoles()) {
     for (const slug of role.clients) {
@@ -424,38 +506,47 @@ export function validateContentGraph(): string[] {
         warnings.push(`client "${client.slug}" references missing role "${slug}"`);
       }
     }
+
+    const onDisk = listFolderSlugs(projectsDirFor(client.slug));
+    for (const slug of client.projects ?? []) {
+      if (!onDisk.includes(slug)) {
+        warnings.push(`client "${client.slug}" lists project "${slug}" that doesn't exist on disk`);
+      }
+    }
+    for (const slug of onDisk) {
+      if (!(client.projects ?? []).includes(slug)) {
+        warnings.push(
+          `client "${client.slug}" has project "${slug}" on disk but not in its projects[] order`,
+        );
+      }
+    }
   }
 
-  for (const project of getAllProjects()) {
-    if (!clientSlugs.has(project.client)) {
-      warnings.push(`project "${project.slug}" references missing client "${project.client}"`);
-    }
+  for (const project of allProjects) {
     if (!roleSlugs.has(project.role)) {
-      warnings.push(`project "${project.slug}" references missing role "${project.role}"`);
+      warnings.push(`project "${project.fullSlug}" references missing role "${project.role}"`);
     }
     for (const slug of project.skills) {
       if (!skillSlugs.has(slug)) {
-        warnings.push(`project "${project.slug}" references missing skill "${slug}"`);
+        warnings.push(`project "${project.fullSlug}" references missing skill "${slug}"`);
       }
     }
   }
 
   for (const study of getAllStudies()) {
-    for (const slug of study.projects ?? []) {
-      if (!projectSlugs.has(slug)) {
-        warnings.push(`study "${study.slug}" references missing project "${slug}"`);
+    for (const ref of study.projects ?? []) {
+      if (!ref.includes("/")) {
+        warnings.push(
+          `study "${study.slug}" references project "${ref}" in short form — studies are peers to clients, so this is ambiguous; use "client/project"`,
+        );
+      } else if (!projectFullSlugs.has(ref)) {
+        warnings.push(`study "${study.slug}" references missing project "${ref}"`);
       }
     }
     for (const slug of study.clients ?? []) {
       if (!clientSlugs.has(slug)) {
         warnings.push(`study "${study.slug}" references missing client "${slug}"`);
       }
-    }
-  }
-
-  for (const artifact of getAllArtifacts()) {
-    if (!projectSlugs.has(artifact.project)) {
-      warnings.push(`artifact "${artifact.slug}" references missing project "${artifact.project}"`);
     }
   }
 
